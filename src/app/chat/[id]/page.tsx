@@ -2,47 +2,26 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import React from 'react'; // useState, useEffect, useRef などは不要になります
+import React from 'react'; // Reactの基本をインポート
 
-// TMDB APIの基本URLとAPIキー (工事中表示のため不要ですが、残しておきます)
+// TMDB APIの基本URLとAPIキー (工事中表示のため、ここでは使用しませんが、残しておきます)
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
-// グローバル変数 (工事中表示のため不要ですが、残しておきます)
-declare const __firebase_config: string | undefined;
-declare const __initial_auth_token: string | undefined;
-declare const __app_id: string | undefined;
-
-// 映画データのインターフェース (映画情報の取得は行わないため、ここでは不要ですが、残しておきます)
-interface MovieData {
-  id: number;
-  title: string;
-  release_date?: string;
-  overview?: string;
-  poster_path?: string;
-}
-
-// チャットメッセージのインターフェース (チャット機能がないため不要ですが、残しておきます)
-interface ChatMessage {
-  id: string;
-  userId: string;
-  text: string;
-  timestamp: any;
-}
-
-// Firestoreに保存するメッセージの形式 (チャット機能がないため不要ですが、残しておきます)
-interface NewChatMessage {
-  userId: string;
-  text: string;
-  timestamp: any;
-}
+// Firebase関連のインポートや型定義は、チャット機能が工事中のため全て削除します。
+// declare const __firebase_config: string | undefined;
+// declare const __initial_auth_token: string | undefined;
+// declare const __app_id: string | undefined;
+// interface MovieData { ... }
+// interface ChatMessage { ... }
+// interface NewChatMessage { ... }
 
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
   const movieId = params.id as string; // URLから映画IDを取得
 
-  // 映画情報やチャットメッセージの状態管理は不要になります
+  // 映画情報やチャットメッセージ、Firebaseの状態管理は全て削除します。
   // const [movie, setMovie] = useState<MovieData | null>(null);
   // const [loadingMovie, setLoadingMovie] = useState(true);
   // const [movieError, setMovieError] = useState<string | null>(null);
@@ -111,8 +90,5 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     alignSelf: 'center',
     transition: 'background-color 0.2s',
-    // '&:hover': { // この行と次の行を削除またはコメントアウト
-    //   backgroundColor: '#5a6268',
-    // },
   },
 };
