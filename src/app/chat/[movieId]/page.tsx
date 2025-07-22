@@ -1,6 +1,8 @@
+// src/app/chat/[movieId]/page.tsx
+
 'use client';
 
-import { setDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -14,6 +16,13 @@ import {
 } from 'firebase/firestore';
 import Image from 'next/image';
 
+// --- 追加ここから ---
+interface Movie {
+  title: string;
+  poster_path: string | null; // ポスターがない場合もあるのでnullを許容
+}
+// --- 追加ここまで ---
+
 type Message = {
   id: string;
   text: string;
@@ -22,17 +31,19 @@ type Message = {
 
 export default function ChatRoomPage() {
   const { movieId } = useParams();
-  const [movieData, setMovieData] = useState<any>(null);
+  // --- 修正ここから ---
+  const [movieData, setMovieData] = useState<Movie | null>(null); // anyからMovieまたはnullへ変更
+  // --- 修正ここまで ---
   const [comment, setComment] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // 映画データ取得（TMDB API）
+  // 映画データ取得
   useEffect(() => {
     const fetchMovieData = async () => {
       const res = await fetch(
         `https://api.themoviedb.org/3/movie/${movieId}?language=ja-JP&api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}`
       );
-      const data = await res.json();
+      const data: Movie = await res.json(); // 取得したデータをMovie型として扱う
       setMovieData(data);
     };
     if (movieId) fetchMovieData();
@@ -57,44 +68,46 @@ export default function ChatRoomPage() {
   }, [movieId]);
 
   // コメント送信
-  const handleSubmit = async () => {
-  if (!comment.trim()) return;
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!comment.trim()) return;
 
-  // メッセージ書き込み
-  await addDoc(collection(db, 'chats', movieId as string, 'messages'), {
-    text: comment,
-    timestamp: Timestamp.now(),
-  });
+    await addDoc(collection(db, 'chats', movieId as string, 'messages'), {
+      text: comment,
+      timestamp: Timestamp.now(),
+    });
 
-  // 🔽 ここを追加：chatSummaries にも更新（上書き or 新規）
-  await setDoc(doc(db, 'chatSummaries', movieId as string), {
-    movieId,
-    title: movieData?.title || '',
-    lastMessageText: comment,
-    lastMessageAt: serverTimestamp(), 
-  });
+    await setDoc(doc(db, 'chatSummaries', movieId as string), {
+      movieId,
+      title: movieData?.title || '', // movieDataがnullの可能性があるのでオプショナルチェイニング
+      lastMessageText: comment,
+      lastMessageAt: serverTimestamp(),
+    });
 
-  setComment('');
-};
+    setComment('');
+  };
 
   return (
     <div className="p-6 max-w-xl mx-auto">
       {movieData && (
         <div className="text-center mb-4">
-          <Image
-            src={`https://image.tmdb.org/t/p/w300${movieData.poster_path}`}
-            alt={movieData.title}
-            width={150}
-            height={225}
-            className="mx-auto rounded shadow"
-          />
+          {/* movieData.poster_path が null の可能性があるので条件付きで表示 */}
+          {movieData.poster_path && (
+            <Image
+              src={`https://image.tmdb.org/t/p/w300${movieData.poster_path}`}
+              alt={movieData.title}
+              width={150}
+              height={225}
+              className="mx-auto rounded shadow"
+            />
+          )}
           <h2 className="text-xl font-bold mt-2">
             この映画「{movieData.title}」について語ろう
           </h2>
         </div>
       )}
 
-      <div className="flex gap-2 mb-4">
+      <form onSubmit={handleSubmit} className="flex gap-2 mb-4">
         <textarea
           className="flex-grow p-2 border rounded resize-none h-24"
           placeholder="メッセージを入力（改行もできます）"
@@ -102,12 +115,12 @@ export default function ChatRoomPage() {
           onChange={(e) => setComment(e.target.value)}
         />
         <button
-          onClick={handleSubmit}
+          type="submit"
           className="bg-blue-600 text-white px-4 py-2 rounded"
         >
           送信
         </button>
-      </div>
+      </form>
 
       <div>
         {messages.map((msg) => (

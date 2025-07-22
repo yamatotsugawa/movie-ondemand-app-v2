@@ -1,3 +1,5 @@
+// src/app/page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,7 +8,15 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Timestamp } from 'firebase/firestore';
 
+interface LatestComment {
+  id: string;
+  movieId: string;
+  movieTitle: string;
+  text: string;
+  createdAt: Timestamp | null;
+}
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
@@ -36,13 +46,14 @@ interface AppMovieResult {
   justWatchLink?: string;
 }
 
-interface LatestComment {
-  id: string;
-  movieId: string;
-  movieTitle: string;
-  text: string;
-  createdAt: any;// eslint-disable-next-line @typescript-eslint/no-explicit-any
-}
+// 既存の LatestComment インターフェースが二重で定義されているので、一つを削除するかコメントアウトしてください。
+// interface LatestComment {
+//   id: string;
+//   movieId: string;
+//   movieTitle: string;
+//   text: string;
+//   createdAt: Timestamp | null;
+// }
 
 export default function Home() {
   const router = useRouter();
@@ -53,24 +64,27 @@ export default function Home() {
   const [latestComments, setLatestComments] = useState<LatestComment[]>([]);
 
   useEffect(() => {
-  const fetchLatestComments = async () => {
-    const q = query(
-      collection(db, 'chatSummaries'),
-      orderBy('lastMessageAt', 'desc'),
-      limit(10)
-    );
-    const snapshot = await getDocs(q);
-    const comments = snapshot.docs.map(doc => ({
-      id: doc.id,
-      movieId: doc.data().movieId,
-      movieTitle: doc.data().title,
-      text: doc.data().lastMessageText,
-      createdAt: doc.data().lastMessageAt,
-    }));
-    setLatestComments(comments);
-  };
-  fetchLatestComments();
-}, []);
+    const fetchLatestComments = async () => {
+      const q = query(
+        collection(db, 'chatSummaries'),
+        orderBy('lastMessageAt', 'desc'),
+        limit(10)
+      );
+      const snapshot = await getDocs(q);
+      const comments = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          movieId: data.movieId || '', // undefinedの場合に備えてデフォルト値を設定
+          movieTitle: data.title || '', // undefinedの場合に備えてデフォルト値を設定
+          text: data.lastMessageText || '', // undefinedの場合に備えてデフォルト値を設定
+          createdAt: data.lastMessageAt || null, // undefinedの場合に備えてデフォルト値を設定
+        } as LatestComment; // 明示的に型をアサート
+      });
+      setLatestComments(comments);
+    };
+    fetchLatestComments();
+  }, []);
 
 
   const getServiceSpecificLink = (providerName: string, movieTitle: string, justWatchMovieLink?: string): string => {
@@ -91,6 +105,8 @@ export default function Home() {
       case 'Google Play Movies':
         return `https://play.google.com/store/search?q=${encodedMovieTitle}&c=movies`;
       case 'YouTube':
+        // YouTubeのリンクはより具体的な検索クエリが必要かもしれません
+        // 現状の `${encodedMovieTitle}+full+movie` だと意図しない結果になる可能性
         return `https://www.youtube.com/results?search_query=${encodedMovieTitle}+full+movie`;
       default:
         return justWatchMovieLink || '#';
