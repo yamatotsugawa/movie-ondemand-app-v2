@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
+
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
@@ -70,6 +71,7 @@ export default function Home() {
   };
   fetchLatestComments();
 }, []);
+
 
   const getServiceSpecificLink = (providerName: string, movieTitle: string, justWatchMovieLink?: string): string => {
     const encodedMovieTitle = encodeURIComponent(movieTitle);
@@ -234,33 +236,43 @@ export default function Home() {
         )}
       </div>
 
-            <div style={styles.latestContainer}>
-        <h2 style={styles.latestTitle}>最新の書き込み</h2>
+            <div className="mt-12 border-t pt-6">
+        <h2 className="text-xl font-semibold text-center mb-4">最新の書き込み</h2>
         {latestComments.length === 0 ? (
-          <p style={styles.noResults}>まだ書き込みはありません</p>
+          <p className="text-center text-gray-400">まだ書き込みはありません</p>
         ) : (
-          <ul>
+          <ul className="space-y-2">
             {latestComments.map((comment, index) => {
               const date = comment.createdAt?.seconds
                 ? new Date(comment.createdAt.seconds * 1000).toLocaleString('ja-JP')
                 : '日時不明';
 
               return (
-                <li key={index} style={styles.commentBox}>
-                  <span
-                    style={styles.commentTitle}
-                    onClick={() => router.push(`/?title=${encodeURIComponent(comment.movieTitle)}`)}
-                  >
-                  {comment.movieTitle}
-                  </span>
-                  <span
-                    style={styles.commentText}
-                    onClick={() => router.push(`/chat/${comment.movieId}`)}
-                  >
-                  {comment.text}
-                  </span>
-                  <span style={styles.commentDate}>{date}</span>
-                </li>
+                <li
+  key={index}
+  className="flex items-center border-b pb-1 gap-2"
+>
+  {/* 映画タイトル */}
+  <span
+    className="text-blue-600 underline cursor-pointer shrink-0 w-32"
+    onClick={() => router.push(`/?title=${encodeURIComponent(comment.movieTitle)}`)}
+  >
+    {comment.movieTitle}
+  </span>
+
+  {/* コメント本文（整列用） */}
+  <span
+    className="flex-1 text-sm truncate cursor-pointer"
+    onClick={() => router.push(`/chat/${comment.movieId}`)}
+  >
+    {comment.text}
+  </span>
+
+  {/* 日付 */}
+  <span className="text-xs text-gray-500 shrink-0 ml-2 whitespace-nowrap">
+    {date}
+  </span>
+</li>
               );
             })}
           </ul>
@@ -269,6 +281,7 @@ export default function Home() {
     </div>
   );
 }
+
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: { fontFamily: 'Arial, sans-serif', maxWidth: '900px', margin: '40px auto', padding: '20px', backgroundColor: '#fff', borderRadius: '12px' },

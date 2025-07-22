@@ -1,5 +1,6 @@
 'use client';
 
+import { setDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -57,13 +58,24 @@ export default function ChatRoomPage() {
 
   // コメント送信
   const handleSubmit = async () => {
-    if (!comment.trim()) return;
-    await addDoc(collection(db, 'chats', movieId as string, 'messages'), {
-      text: comment,
-      timestamp: Timestamp.now(),
-    });
-    setComment('');
-  };
+  if (!comment.trim()) return;
+
+  // メッセージ書き込み
+  await addDoc(collection(db, 'chats', movieId as string, 'messages'), {
+    text: comment,
+    timestamp: Timestamp.now(),
+  });
+
+  // 🔽 ここを追加：chatSummaries にも更新（上書き or 新規）
+  await setDoc(doc(db, 'chatSummaries', movieId as string), {
+    movieId,
+    title: movieData?.title || '',
+    lastMessageText: comment,
+    lastMessageAt: serverTimestamp(), 
+  });
+
+  setComment('');
+};
 
   return (
     <div className="p-6 max-w-xl mx-auto">
