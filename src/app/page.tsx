@@ -41,7 +41,7 @@ interface LatestComment {
   movieId: string;
   movieTitle: string;
   text: string;
-  createdAt: any;
+  createdAt: any;// eslint-disable-next-line @typescript-eslint/no-explicit-any
 }
 
 export default function Home() {
