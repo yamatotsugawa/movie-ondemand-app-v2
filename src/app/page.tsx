@@ -1,8 +1,6 @@
-// src/app/page.tsx
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import React from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -47,7 +45,7 @@ interface AppMovieResult {
   justWatchLink?: string;
 }
 
-export default function Home() {
+function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [movieTitle, setMovieTitle] = useState('');
@@ -223,7 +221,7 @@ export default function Home() {
                 {movie.poster_path && (
                   <Image src={`https://image.tmdb.org/t/p/w200${movie.poster_path}`} alt={movie.title} width={100} height={150} className="rounded-md" />
                 )}
-                <button onClick={() => router.push(`/chat/${movie.id}`)} className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md">
+                <button onClick={() => router.push(`/chat/${movie.id}`)} className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md w-full">
                   この映画について語る
                 </button>
               </div>
@@ -244,7 +242,9 @@ export default function Home() {
                     <p className="text-sm text-gray-400">現在、視聴可能なサービス情報は見つかりませんでした。</p>
                   )}
                   <a href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title)}&i=dvd`} target="_blank" rel="noopener noreferrer">
-                    <button className="mt-2 bg-yellow-400 px-3 py-1 text-sm text-black rounded w-full sm:w-auto">DVDを探す</button>
+                    <button className="mt-2 bg-yellow-400 text-black text-sm rounded-md w-full py-1">
+                      DVDを探す
+                    </button>
                   </a>
                 </div>
               </div>
@@ -259,32 +259,33 @@ export default function Home() {
           <p className="text-center text-gray-400">まだ書き込みはありません</p>
         ) : (
           <ul className="space-y-2">
-  {latestComments.map((comment, index) => {
-    const date = comment.createdAt?.seconds
-      ? new Date(comment.createdAt.seconds * 1000).toLocaleDateString('ja-JP')
-      : '日時不明';
-
-    return (
-      <li key={index} className="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-1 sm:gap-2">
-        <Link href={`/?title=${encodeURIComponent(comment.movieTitle)}`}>
-          <span className="text-blue-600 underline cursor-pointer shrink-0">
-            {comment.movieTitle}
-          </span>
-        </Link>
-        <Link href={`/chat/${comment.movieId}`}>
-          <span className="flex-1 text-sm truncate cursor-pointer">
-            {comment.text}
-          </span>
-        </Link>
-        <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-          {date}
-        </span>
-      </li>
-    );
-  })}
-</ul>
+            {latestComments.map((comment, index) => {
+              const date = comment.createdAt?.seconds
+                ? new Date(comment.createdAt.seconds * 1000).toLocaleDateString('ja-JP')
+                : '日時不明';
+              return (
+                <li key={index} className="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-1 sm:gap-2">
+                  <Link href={`/?title=${encodeURIComponent(comment.movieTitle)}`}>
+                    <span className="text-blue-600 underline cursor-pointer shrink-0">{comment.movieTitle}</span>
+                  </Link>
+                  <Link href={`/chat/${comment.movieId}`}>
+                    <span className="flex-1 text-sm truncate cursor-pointer">{comment.text}</span>
+                  </Link>
+                  <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">{date}</span>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>読み込み中...</div>}>
+      <SearchContent />
+    </Suspense>
   );
 }
