@@ -5,10 +5,11 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Timestamp } from 'firebase/firestore';
+import Link from 'next/link';
 
 interface LatestComment {
   id: string;
@@ -46,22 +47,22 @@ interface AppMovieResult {
   justWatchLink?: string;
 }
 
-// 既存の LatestComment インターフェースが二重で定義されているので、一つを削除するかコメントアウトしてください。
-// interface LatestComment {
-//   id: string;
-//   movieId: string;
-//   movieTitle: string;
-//   text: string;
-//   createdAt: Timestamp | null;
-// }
-
 export default function Home() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [movieTitle, setMovieTitle] = useState('');
   const [results, setResults] = useState<AppMovieResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latestComments, setLatestComments] = useState<LatestComment[]>([]);
+
+  useEffect(() => {
+    const titleParam = searchParams.get('title');
+    if (titleParam) {
+      setMovieTitle(titleParam);
+      handleSearch(undefined, titleParam);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchLatestComments = async () => {
@@ -75,17 +76,16 @@ export default function Home() {
         const data = doc.data();
         return {
           id: doc.id,
-          movieId: data.movieId || '', // undefinedの場合に備えてデフォルト値を設定
-          movieTitle: data.title || '', // undefinedの場合に備えてデフォルト値を設定
-          text: data.lastMessageText || '', // undefinedの場合に備えてデフォルト値を設定
-          createdAt: data.lastMessageAt || null, // undefinedの場合に備えてデフォルト値を設定
-        } as LatestComment; // 明示的に型をアサート
+          movieId: data.movieId || '',
+          movieTitle: data.title || '',
+          text: data.lastMessageText || '',
+          createdAt: data.lastMessageAt || null,
+        } as LatestComment;
       });
       setLatestComments(comments);
     };
     fetchLatestComments();
   }, []);
-
 
   const getServiceSpecificLink = (providerName: string, movieTitle: string, justWatchMovieLink?: string): string => {
     const encodedMovieTitle = encodeURIComponent(movieTitle);
@@ -105,21 +105,21 @@ export default function Home() {
       case 'Google Play Movies':
         return `https://play.google.com/store/search?q=${encodedMovieTitle}&c=movies`;
       case 'YouTube':
-        // YouTubeのリンクはより具体的な検索クエリが必要かもしれません
-        // 現状の `${encodedMovieTitle}+full+movie` だと意図しない結果になる可能性
         return `https://www.youtube.com/results?search_query=${encodedMovieTitle}+full+movie`;
       default:
         return justWatchMovieLink || '#';
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e?: React.FormEvent, overrideTitle?: string) => {
+    if (e) e.preventDefault();
     setLoading(true);
     setError(null);
     setResults([]);
 
-    if (!movieTitle.trim()) {
+    const queryTitle = overrideTitle ?? movieTitle;
+
+    if (!queryTitle.trim()) {
       setError('映画名を入力してください。');
       setLoading(false);
       return;
@@ -132,7 +132,7 @@ export default function Home() {
     }
 
     try {
-      const searchUrl = `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(movieTitle)}&api_key=${TMDB_API_KEY}&language=ja-JP`;
+      const searchUrl = `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(queryTitle)}&api_key=${TMDB_API_KEY}&language=ja-JP`;
       const searchResponse = await fetch(searchUrl);
       if (!searchResponse.ok) throw new Error(`映画検索に失敗しました: ${searchResponse.statusText}`);
       const searchData: { results: MovieData[] } = await searchResponse.json();
@@ -196,131 +196,95 @@ export default function Home() {
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>どのオンデマンドで観れる？</h1>
-      <form onSubmit={handleSearch} style={styles.form}>
+    <main className="max-w-screen-lg mx-auto px-4 py-6">
+      <h1 className="text-2xl sm:text-3xl text-center font-bold mb-4">どのオンデマンドで観れる？</h1>
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row justify-center gap-2 mb-4 px-2">
         <input
           type="text"
           value={movieTitle}
           onChange={(e) => setMovieTitle(e.target.value)}
           placeholder="映画名を入力してください"
-          style={styles.input}
+          className="p-2 border rounded-md flex-grow"
           disabled={loading}
         />
-        <button type="submit" style={styles.button} disabled={loading}>
+        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md" disabled={loading}>
           {loading ? '検索中...' : '検索'}
         </button>
       </form>
-      <p style={styles.noticeText}>結果が出てこない場合はスペースなどを入れるか英語名で検索してみてください。</p>
-      {error && <p style={styles.errorText}>{error}</p>}
+      <p className="text-center text-sm text-gray-500 mb-6">結果が出てこない場合はスペースなどを入れるか英語名で検索してみてください。</p>
+      {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
-      <div style={styles.resultsContainer}>
-        {results.length > 0 && (
-          <>
-            <h2 style={styles.resultsTitle}>検索結果</h2>
-            {results.map((movie) => (
-              <div key={movie.id} style={styles.card}>
-                <div style={styles.posterSection}>
-                  {movie.poster_path && (
-                    <Image src={`https://image.tmdb.org/t/p/w200${movie.poster_path}`} alt={movie.title} width={130} height={200} style={{ borderRadius: '8px' }} />
+      {results.length > 0 && (
+        <div className="space-y-8">
+          <h2 className="text-xl font-semibold text-center">検索結果</h2>
+          {results.map((movie) => (
+            <div key={movie.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-md flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col items-center">
+                {movie.poster_path && (
+                  <Image src={`https://image.tmdb.org/t/p/w200${movie.poster_path}`} alt={movie.title} width={100} height={150} className="rounded-md" />
+                )}
+                <button onClick={() => router.push(`/chat/${movie.id}`)} className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md">
+                  この映画について語る
+                </button>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold">{movie.title}（{movie.release_date?.slice(0, 4)}）</h3>
+                <p className="text-sm text-gray-700 mb-2">{movie.overview?.slice(0, 200)}...</p>
+                <div>
+                  <strong className="block mb-1">視聴可能サービス：</strong>
+                  {movie.streamingServices?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {movie.streamingServices.map((s, i) => (
+                        <a key={i} href={s.link} target="_blank" rel="noopener noreferrer">
+                          <Image src={`https://image.tmdb.org/t/p/w45${s.logo}`} alt={s.name} width={30} height={30} className="rounded border" />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">現在、視聴可能なサービス情報は見つかりませんでした。</p>
                   )}
-                  <button onClick={() => router.push(`/chat/${movie.id}`)} style={styles.chatButton}>
-                    この映画について語る
-                  </button>
-                </div>
-                <div style={styles.movieDetails}>
-                  <h3 style={styles.movieTitle}>{movie.title}（{movie.release_date?.slice(0, 4)}）</h3>
-                  <p style={styles.movieOverview}>{movie.overview?.slice(0, 200)}...</p>
-                  <div>
-                    <strong>視聴可能サービス：</strong>
-                    {movie.streamingServices?.length ? (
-                      <div style={styles.providerLogos}>
-                        {movie.streamingServices.map((s, i) => (
-                          <a key={i} href={s.link} target="_blank" rel="noopener noreferrer">
-                            <Image src={`https://image.tmdb.org/t/p/w45${s.logo}`} alt={s.name} width={30} height={30} style={styles.providerLogo} />
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <p style={{ color: '#999', fontSize: '14px' }}>現在、視聴可能なサービス情報は見つかりませんでした。</p>
-                    )}
-                  </div>
+                  <a href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title)}&i=dvd`} target="_blank" rel="noopener noreferrer">
+                    <button className="mt-2 bg-yellow-400 px-3 py-1 text-sm text-black rounded w-full sm:w-auto">DVDを探す</button>
+                  </a>
                 </div>
               </div>
-            ))}
-          </>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-            <div className="mt-12 border-t pt-6">
+      <div className="mt-12 border-t pt-6">
         <h2 className="text-xl font-semibold text-center mb-4">最新の書き込み</h2>
         {latestComments.length === 0 ? (
           <p className="text-center text-gray-400">まだ書き込みはありません</p>
         ) : (
           <ul className="space-y-2">
-            {latestComments.map((comment, index) => {
-              const date = comment.createdAt?.seconds
-                ? new Date(comment.createdAt.seconds * 1000).toLocaleString('ja-JP')
-                : '日時不明';
+  {latestComments.map((comment, index) => {
+    const date = comment.createdAt?.seconds
+      ? new Date(comment.createdAt.seconds * 1000).toLocaleDateString('ja-JP')
+      : '日時不明';
 
-              return (
-                <li
-  key={index}
-  className="flex items-center border-b pb-1 gap-2"
->
-  {/* 映画タイトル */}
-  <span
-    className="text-blue-600 underline cursor-pointer shrink-0 w-32"
-    onClick={() => router.push(`/?title=${encodeURIComponent(comment.movieTitle)}`)}
-  >
-    {comment.movieTitle}
-  </span>
-
-  {/* コメント本文（整列用） */}
-  <span
-    className="flex-1 text-sm truncate cursor-pointer"
-    onClick={() => router.push(`/chat/${comment.movieId}`)}
-  >
-    {comment.text}
-  </span>
-
-  {/* 日付 */}
-  <span className="text-xs text-gray-500 shrink-0 ml-2 whitespace-nowrap">
-    {date}
-  </span>
-</li>
-              );
-            })}
-          </ul>
+    return (
+      <li key={index} className="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-1 sm:gap-2">
+        <Link href={`/?title=${encodeURIComponent(comment.movieTitle)}`}>
+          <span className="text-blue-600 underline cursor-pointer shrink-0">
+            {comment.movieTitle}
+          </span>
+        </Link>
+        <Link href={`/chat/${comment.movieId}`}>
+          <span className="flex-1 text-sm truncate cursor-pointer">
+            {comment.text}
+          </span>
+        </Link>
+        <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+          {date}
+        </span>
+      </li>
+    );
+  })}
+</ul>
         )}
       </div>
-    </div>
+    </main>
   );
 }
-
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: { fontFamily: 'Arial, sans-serif', maxWidth: '900px', margin: '40px auto', padding: '20px', backgroundColor: '#fff', borderRadius: '12px' },
-  title: { textAlign: 'center', fontSize: '28px', color: '#222', marginBottom: '20px' },
-  form: { display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' },
-  noticeText: { textAlign: 'center', color: '#666', fontSize: '14px', marginBottom: '20px' },
-  input: { padding: '12px', fontSize: '16px', width: '60%', borderRadius: '6px', border: '1px solid #ccc' },
-  button: { padding: '12px 20px', fontSize: '16px', backgroundColor: '#0070f3', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  errorText: { color: 'red', textAlign: 'center', margin: '10px 0' },
-  resultsContainer: { marginTop: '30px' },
-  resultsTitle: { textAlign: 'center', fontSize: '22px', marginBottom: '20px' },
-  card: { backgroundColor: '#fff', borderRadius: '10px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', marginBottom: '24px', display: 'flex', gap: '20px' },
-  posterSection: { flex: '0 0 auto', textAlign: 'center' },
-  chatButton: { marginTop: '12px', backgroundColor: '#0070f3', color: '#fff', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  movieDetails: { flex: '1 1 auto' },
-  movieTitle: { fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' },
-  movieOverview: { fontSize: '14px', color: '#555', lineHeight: '1.6' },
-  providerLogos: { marginTop: '10px', display: 'flex', gap: '10px', flexWrap: 'wrap' },
-  providerLogo: { borderRadius: '4px', border: '1px solid #ddd' },
-  noResults: { textAlign: 'center', color: '#999', fontSize: '14px' },
-  latestContainer: { marginTop: '40px', paddingTop: '20px', borderTop: '2px solid #eee' },
-  latestTitle: { fontSize: '20px', marginBottom: '16px', textAlign: 'center' },
-  commentBox: { display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', padding: '8px 0', cursor: 'pointer' },
-  commentTitle: { color: '#0070f3', textDecoration: 'underline', marginRight: '16px', flex: '0 0 auto' },
-  commentText: { flex: '1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#222' },
-};
