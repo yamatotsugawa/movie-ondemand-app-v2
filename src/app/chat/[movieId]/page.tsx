@@ -1,5 +1,3 @@
-// src/app/chat/[movieId]/page.tsx
-
 'use client';
 
 import { setDoc, doc, serverTimestamp } from 'firebase/firestore';
@@ -15,13 +13,12 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import Image from 'next/image';
+import Link from 'next/link';
 
-// --- 追加ここから ---
 interface Movie {
   title: string;
-  poster_path: string | null; // ポスターがない場合もあるのでnullを許容
+  poster_path: string | null;
 }
-// --- 追加ここまで ---
 
 type Message = {
   id: string;
@@ -31,25 +28,28 @@ type Message = {
 
 export default function ChatRoomPage() {
   const { movieId } = useParams();
-  // --- 修正ここから ---
-  const [movieData, setMovieData] = useState<Movie | null>(null); // anyからMovieまたはnullへ変更
-  // --- 修正ここまで ---
+  const [movieData, setMovieData] = useState<Movie | null>(null);
   const [comment, setComment] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [currentUrl, setCurrentUrl] = useState('');
 
-  // 映画データ取得
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentUrl(window.location.href);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchMovieData = async () => {
       const res = await fetch(
         `https://api.themoviedb.org/3/movie/${movieId}?language=ja-JP&api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}`
       );
-      const data: Movie = await res.json(); // 取得したデータをMovie型として扱う
+      const data: Movie = await res.json();
       setMovieData(data);
     };
     if (movieId) fetchMovieData();
   }, [movieId]);
 
-  // Firestoreからメッセージ取得
   useEffect(() => {
     if (!movieId) return;
     const q = query(
@@ -67,7 +67,6 @@ export default function ChatRoomPage() {
     return () => unsubscribe();
   }, [movieId]);
 
-  // コメント送信
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!comment.trim()) return;
@@ -79,7 +78,7 @@ export default function ChatRoomPage() {
 
     await setDoc(doc(db, 'chatSummaries', movieId as string), {
       movieId,
-      title: movieData?.title || '', // movieDataがnullの可能性があるのでオプショナルチェイニング
+      title: movieData?.title || '',
       lastMessageText: comment,
       lastMessageAt: serverTimestamp(),
     });
@@ -88,10 +87,19 @@ export default function ChatRoomPage() {
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
+    <main className="max-w-screen-md mx-auto px-4 py-6">
+      {/* ホームに戻るボタン */}
+      <div className="mb-4">
+        <Link href="/" passHref>
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded">
+            ホームに戻る
+          </button>
+        </Link>
+      </div>
+
+      {/* 映画情報表示 */}
       {movieData && (
         <div className="text-center mb-4">
-          {/* movieData.poster_path が null の可能性があるので条件付きで表示 */}
           {movieData.poster_path && (
             <Image
               src={`https://image.tmdb.org/t/p/w300${movieData.poster_path}`}
@@ -107,6 +115,33 @@ export default function ChatRoomPage() {
         </div>
       )}
 
+      {/* SNS共有ボタン */}
+      {currentUrl && movieData && (
+        <div className="flex justify-center gap-4 mt-6">
+          <a
+      href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+        `この映画「${movieData.title}」について語ろう！`
+      )}&url=${encodeURIComponent(currentUrl)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded"
+    >
+      Xで共有
+    </a>
+          <a
+            href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(
+              currentUrl
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+          >
+            LINEで共有
+          </a>
+        </div>
+      )}
+
+      {/* コメント投稿フォーム */}
       <form onSubmit={handleSubmit} className="flex gap-2 mb-4">
         <textarea
           className="flex-grow p-2 border rounded resize-none h-24"
@@ -122,6 +157,7 @@ export default function ChatRoomPage() {
         </button>
       </form>
 
+      {/* メッセージ一覧 */}
       <div>
         {messages.map((msg) => (
           <div key={msg.id} className="mb-3 border-b pb-2">
@@ -132,6 +168,6 @@ export default function ChatRoomPage() {
           </div>
         ))}
       </div>
-    </div>
+    </main>
   );
 }
