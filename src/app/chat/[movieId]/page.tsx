@@ -134,14 +134,6 @@ export default function ChatRoomPage() {
     >
       LINEで共有
     </a>
-    <a
-  href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movieData.title + ' DVD')}&tag=tetsugakuman-22`} // ←ここにアフィリエイトタグ
-  target="_blank"
-  rel="noopener noreferrer"
-  className="bg-yellow-500 text-black px-4 py-2 rounded mt-4 inline-block"
->
-  DVDを探す（Amazon）
-</a>
   </div>
 )}
 
