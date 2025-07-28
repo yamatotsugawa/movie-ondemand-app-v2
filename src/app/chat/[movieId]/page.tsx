@@ -117,29 +117,25 @@ export default function ChatRoomPage() {
 
       {/* SNS共有ボタン */}
       {currentUrl && movieData && (
-        <div className="flex justify-center gap-4 mt-6">
-          <a
-      href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
-        `この映画「${movieData.title}」について語ろう！`
-      )}&url=${encodeURIComponent(currentUrl)}`}
+        <div className="flex justify-center gap-4 mt-6 mb-6">
+    <a
+      href={`https://twitter.com/share?url=${encodeURIComponent(currentUrl)}&text=「${movieData.title}」について語ろう`}
       target="_blank"
       rel="noopener noreferrer"
-      className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded"
+      className="bg-black text-white px-4 py-2 rounded"
     >
       Xで共有
     </a>
-          <a
-            href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(
-              currentUrl
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-          >
-            LINEで共有
-          </a>
-        </div>
-      )}
+    <a
+      href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(currentUrl)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="bg-green-500 text-white px-4 py-2 rounded"
+    >
+      LINEで共有
+    </a>
+  </div>
+)}
 
       {/* コメント投稿フォーム */}
       <form onSubmit={handleSubmit} className="flex gap-2 mb-4">
