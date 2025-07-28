@@ -241,11 +241,15 @@ function SearchContent() {
                   ) : (
                     <p className="text-sm text-gray-400">現在、視聴可能なサービス情報は見つかりませんでした。</p>
                   )}
-                  <a href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title)}&i=dvd`} target="_blank" rel="noopener noreferrer">
-                    <button className="mt-2 bg-yellow-400 text-black text-sm rounded-md w-full py-1">
-                      DVDを探す
-                    </button>
-                  </a>
+                  <a
+  href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title + ' DVD')}&i=dvd&tag=tetsugakuman-22`}
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <button className="mt-2 bg-yellow-400 text-black text-sm rounded-md w-full py-1">
+    DVDを探す
+  </button>
+</a>
                 </div>
               </div>
             </div>
