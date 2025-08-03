@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import React from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
@@ -25,14 +25,14 @@ interface MovieData {
   title: string;
   release_date?: string;
   overview?: string;
-  poster_path?: string;
+  poster_path?: string; // 例: "/abc.jpg" or "abc.jpg"
   vote_count?: number;
 }
 
 interface Provider {
   provider_id: number;
   provider_name: string;
-  logo_path: string;
+  logo_path: string; // 例: "/xyz.png"
 }
 
 interface AppMovieResult extends MovieData {
@@ -40,14 +40,25 @@ interface AppMovieResult extends MovieData {
   justWatchLink?: string;
 }
 
-// 正規化関数
-function normalizeText(s: string) {
+// ========== ユーティリティ ==========
+
+// 文字列正規化（タイトル・キーワード比較用）
+function normalizeTitle(s: string): string {
   return (s || '')
     .toLowerCase()
-    .replace(/[“”"‘’'・・‐—\-:：、，。!\?？\.\(\)\[\]{}]/g, ' ')
+    .replace(/[“”"‘’'・・‐—\-:：、，。!?？.\(\)\[\]{}]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+// TMDB 画像URLを安全に組み立て（先頭スラッシュ重複や欠損をケア）
+function tmdbImg(path: string | undefined, size: 'w45' | 'w92' | 'w154' | 'w185' | 'w200' | 'w300' | 'original') {
+  if (!path) return '';
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `https://image.tmdb.org/t/p/${size}${p}`;
+}
+
+// ========== Component ==========
 
 function SearchContent() {
   const router = useRouter();
@@ -66,13 +77,13 @@ function SearchContent() {
       const snapshot = await getDocs(q);
       setLatestComments(
         snapshot.docs.map((doc) => {
-          const data = doc.data();
+          const data = doc.data() as DocumentData;
           return {
             id: doc.id,
-            movieId: data.movieId || '',
-            movieTitle: data.title || '',
-            text: data.lastMessageText || '',
-            createdAt: data.lastMessageAt || null,
+            movieId: (data.movieId as string) || '',
+            movieTitle: (data.title as string) || '',
+            text: (data.lastMessageText as string) || '',
+            createdAt: (data.lastMessageAt as Timestamp) || null,
           } as LatestComment;
         })
       );
@@ -86,17 +97,21 @@ function SearchContent() {
     if (titleParam) {
       setMovieTitle(titleParam);
       setSearchMode('title');
-      handleSearch(undefined, titleParam, 'title');
+      void handleSearch(undefined, titleParam, 'title');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // TMDB検索（日本語+英語）
-  const searchTMDBBoth = async (title: string, limit: number = 2) => {
+  const searchTMDBBoth = async (title: string, limit: number = 2): Promise<MovieData[]> => {
     const urlJa = `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(title)}&api_key=${TMDB_API_KEY}&language=ja-JP`;
     const urlEn = `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(title)}&api_key=${TMDB_API_KEY}&language=en-US`;
 
     const [resJa, resEn] = await Promise.all([fetch(urlJa), fetch(urlEn)]);
-    const [jsonJa, jsonEn] = await Promise.all([resJa.json(), resEn.json()]);
+    const [jsonJa, jsonEn]: [{ results: MovieData[] }, { results: MovieData[] }] = await Promise.all([
+      resJa.json(),
+      resEn.json(),
+    ]);
 
     const jaResults = jsonJa?.results ?? [];
     const enResults = jsonEn?.results ?? [];
@@ -110,7 +125,7 @@ function SearchContent() {
         if ((!existing.title || /^[A-Za-z0-9\s]+$/.test(existing.title)) && m.title) {
           existing.title = m.title;
         }
-        if ((!existing.overview || existing.overview.length < 5) && m.overview) {
+        if ((!existing.overview || (existing.overview || '').length < 5) && m.overview) {
           existing.overview = m.overview;
         }
         mergedMap.set(m.id, existing);
@@ -124,20 +139,42 @@ function SearchContent() {
   const getServiceSpecificLink = (providerName: string, movieTitle: string, justWatchMovieLink?: string): string => {
     const encoded = encodeURIComponent(movieTitle);
     switch (providerName) {
-      case 'Amazon Prime Video': return `https://www.amazon.co.jp/s?k=${encoded}&i=instant-video`;
-      case 'Netflix': return 'https://www.netflix.com/jp/';
-      case 'U-NEXT': return 'https://video.unext.jp/';
-      case 'Hulu': return 'https://www.hulu.jp/';
-      case 'Disney Plus': return 'https://www.disneyplus.com/ja-jp';
-      case 'Apple TV': return `https://tv.apple.com/jp/search/${encoded}`;
-      case 'Google Play Movies': return `https://play.google.com/store/search?q=${encoded}&c=movies`;
-      case 'YouTube': return `https://www.youtube.com/results?search_query=${encoded}+full+movie`;
-      default: return justWatchMovieLink || '#';
+      case 'Amazon Prime Video':
+        return `https://www.amazon.co.jp/s?k=${encoded}&i=instant-video`;
+      case 'Netflix':
+        return 'https://www.netflix.com/jp/';
+      case 'U-NEXT':
+        return 'https://video.unext.jp/';
+      case 'Hulu':
+        return 'https://www.hulu.jp/';
+      case 'Disney Plus':
+        return 'https://www.disneyplus.com/ja-jp';
+      case 'Apple TV':
+        return `https://tv.apple.com/jp/search/${encoded}`;
+      case 'Google Play Movies':
+        return `https://play.google.com/store/search?q=${encoded}&c=movies`;
+      case 'YouTube':
+        return `https://www.youtube.com/results?search_query=${encoded}+full+movie`;
+      default:
+        return justWatchMovieLink || '#';
     }
   };
 
+  // API の型（最小限）
+  interface GoogleSearchResponse {
+    items?: { title: string; link?: string; snippet: string }[];
+  }
+  interface ExtractedTitles {
+    titlesJa?: string[];
+    titlesEn?: string[];
+  }
+
   // メイン検索
-  const handleSearch = async (e?: React.FormEvent, overrideTitle?: string, forceMode?: 'title' | 'content') => {
+  const handleSearch = async (
+    e?: React.FormEvent,
+    overrideTitle?: string,
+    forceMode?: 'title' | 'content'
+  ) => {
     if (e) e.preventDefault();
     setLoading(true);
     setError(null);
@@ -154,98 +191,144 @@ function SearchContent() {
 
     try {
       let movieCandidates: MovieData[] = [];
-      let googleCandidates: string[] = [];
-      let gptCandidates: string[] = [];
 
-      if (mode === 'content') {
-        // Google検索で候補を取得
-        const cseQuery = `${queryText} site:eiga.com OR site:filmarks.com OR site:ja.wikipedia.org OR site:cinematoday.jp OR site:imdb.com`;
-        const googleUrl = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(
-          cseQuery
-        )}&key=${process.env.NEXT_PUBLIC_GOOGLE_API_KEY}&cx=${process.env.NEXT_PUBLIC_GOOGLE_CSE_ID}`;
+      if (mode === 'title') {
+        // タイトル検索：JP/EN 両方でTMDB検索
+        movieCandidates = await searchTMDBBoth(queryText, 10);
+      } else {
+        // ========= 内容検索 =========
 
-        const googleRes = await fetch(googleUrl);
-        const googleData = await googleRes.json();
-        googleCandidates = googleData?.items?.map((i: any) => i.title) ?? [];
-
-        // GPT候補を抽出
-        const items = googleData?.items?.map((i: any) => ({
-          title: i.title, snippet: i.snippet
-        })) ?? [];
-
-        const extractRes = await fetch('/api/extract-titles', {
+        // 1) Google検索（/api/search）
+        const googleRes = await fetch('/api/search', {
           method: 'POST',
-          body: JSON.stringify({ items, originalQuery: queryText }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: queryText }),
         });
 
-        const extractJson = await extractRes.json();
-        gptCandidates = [...(extractJson?.titlesJa ?? []), ...(extractJson?.titlesEn ?? [])];
-
-        // TMDBで全候補タイトルを検索
-        const uniqueCandidates = Array.from(new Set([...googleCandidates, ...gptCandidates, queryText]));
-        for (const title of uniqueCandidates) {
-          const hits = await searchTMDBBoth(title, 2);
-          movieCandidates.push(...hits);
+        if (!googleRes.ok) {
+          console.error('Google APIエラー:', googleRes.status);
+          setError('Google検索に失敗しました。');
+          setLoading(false);
+          return;
         }
-        movieCandidates = Array.from(new Map(movieCandidates.map((m) => [m.id, m])).values());
 
-        // スコアリング
-        const candidatesIndexMap = Object.fromEntries(
-          googleCandidates.map((title, index) => [normalizeText(title), index])
+        let googleData: GoogleSearchResponse = {};
+        try {
+          googleData = await googleRes.json();
+        } catch (err) {
+          console.error('GoogleレスポンスがJSONでない:', err);
+          setError('Google検索のレスポンス解析に失敗しました。');
+          setLoading(false);
+          return;
+        }
+        const googleItems: Array<{ title?: string; snippet?: string }> = googleData.items || [];
+
+        // 2) GPTで候補タイトル抽出（/api/extract-titles）
+        const extractRes = await fetch('/api/extract-titles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: googleItems, originalQuery: queryText }),
+        });
+
+        if (!extractRes.ok) {
+          console.error('extract-titles APIエラー:', extractRes.status);
+          setError('GPTで候補抽出に失敗しました。');
+          setLoading(false);
+          return;
+        }
+
+        let extracted: ExtractedTitles = {};
+        try {
+          extracted = await extractRes.json();
+        } catch (err) {
+          console.error('extract-titles レスポンスがJSONでない:', err);
+          setError('GPTレスポンス解析に失敗しました。');
+          setLoading(false);
+          return;
+        }
+
+        const titlesJa: string[] = Array.isArray(extracted.titlesJa) ? extracted.titlesJa : [];
+        const titlesEn: string[] = Array.isArray(extracted.titlesEn) ? extracted.titlesEn : [];
+
+        // 3) 候補生成（重複除去 & クリーニング）
+        let candidates: string[] = Array.from(
+          new Set(
+            [...titlesJa, ...titlesEn]
+              .map((t) => (t || '').trim())
+              .filter(Boolean)
+              .map((t) => t.replace(/\s{2,}/g, ' '))
+          )
         );
 
-        const qNorm = normalizeText(queryText);
+        // フォールバック：Google結果のタイトルからも候補を生成
+        if (candidates.length === 0) {
+          const fromGoogle = googleItems
+            .map((it) => (it.title || '').trim())
+            .filter(Boolean)
+            .map((t) =>
+              t
+                .replace(/[-–—|｜:].*$/, '')
+                .replace(/\(\d{4}\)/, '')
+                .trim()
+            );
+          candidates = Array.from(new Set(fromGoogle)).slice(0, 10);
+        }
+
+        if (candidates.length === 0) {
+          setError('候補が見つかりませんでした。キーワードを変えて再検索してください。');
+          setLoading(false);
+          return;
+        }
+
+        // 4) 候補をTMDBで検索して集約
+        const allResults: MovieData[] = [];
+        for (const title of candidates) {
+          const tmdbResults = await searchTMDBBoth(title, 5);
+          allResults.push(...tmdbResults);
+        }
+
+        // 重複除去
+        const uniqueResults = Array.from(new Map(allResults.map((m) => [m.id, m])).values());
+
+        // 5) overview スコアで並べ替え（キーワード一致個数）
+        const qNorm = normalizeTitle(queryText);
         const queryKeywords = qNorm.split(' ').filter(Boolean);
 
-        movieCandidates = movieCandidates
+        movieCandidates = uniqueResults
           .map((m) => {
-            const tNorm = normalizeText(m.title);
-
-            // Google順序スコア
-            const googleRank = candidatesIndexMap[tNorm] ?? 99;
-            const googleScore = googleRank < 3 ? 3 : googleRank < 6 ? 2 : 0;
-
-            // GPT順序スコア
-            const gptIndex = gptCandidates.findIndex((c) => normalizeText(c) === tNorm);
-            const gptScore = gptIndex >= 0 ? 10 - gptIndex : 0;
-
-            // overviewスコア
-            let overviewScore = 0;
-            if (m.overview) {
-              const overviewNorm = normalizeText(m.overview);
-              const matchCount = queryKeywords.filter((kw) => overviewNorm.includes(kw)).length;
-              overviewScore = matchCount >= 3 ? 3 : matchCount === 2 ? 2 : matchCount === 1 ? 1 : 0;
-            }
-
-            return { item: m as AppMovieResult, score: googleScore + gptScore + overviewScore };
+            const overviewNorm = normalizeTitle(m.overview || '');
+            const matchCount = queryKeywords.filter((kw) => overviewNorm.includes(kw)).length;
+            const overviewScore = matchCount >= 3 ? 3 : matchCount === 2 ? 2 : matchCount === 1 ? 1 : 0;
+            return { item: m, score: overviewScore };
           })
           .sort((a, b) => b.score - a.score)
           .map((x) => x.item);
-      } else {
-        // タイトル検索
-        movieCandidates = await searchTMDBBoth(queryText, 10);
       }
 
-      // ストリーミングサービス情報付加
+      // ========= 視聴サービス情報付加 =========
       const withProviders = await Promise.all(
         movieCandidates.map(async (movie) => {
           try {
+            // 概要が薄ければ英語詳細で補完
             if (!movie.overview || movie.overview.length < 5) {
               const enDetailUrl = `${TMDB_BASE_URL}/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=en-US`;
               const enDetailRes = await fetch(enDetailUrl);
               if (enDetailRes.ok) {
-                const enData = await enDetailRes.json();
+                const enData: MovieData = await enDetailRes.json();
                 movie.overview = enData.overview || movie.overview;
               }
             }
 
+            // 視聴プロバイダ
             const providersUrl = `${TMDB_BASE_URL}/movie/${movie.id}/watch/providers?api_key=${TMDB_API_KEY}`;
             const provRes = await fetch(providersUrl);
             const services: { name: string; logo: string; link?: string }[] = [];
             let justWatchLink: string | undefined;
 
             if (provRes.ok) {
-              const providersData = await provRes.json();
+              const providersData: {
+                results?: { JP?: { link?: string; flatrate?: Provider[]; buy?: Provider[]; rent?: Provider[] } };
+              } = await provRes.json();
               const jpProviders = providersData.results?.JP;
               justWatchLink = jpProviders?.link;
 
@@ -271,9 +354,9 @@ function SearchContent() {
       );
 
       setResults(withProviders);
-    } catch (e) {
-      console.error(e);
-      setError('検索中にエラーが発生しました。APIキーやCSE設定を確認してください。');
+    } catch (err) {
+      console.error(err);
+      setError('検索中にエラーが発生しました。');
     } finally {
       setLoading(false);
     }
@@ -301,11 +384,23 @@ function SearchContent() {
       {/* モード切替 */}
       <div className="text-center mb-2">
         <label className="mr-4">
-          <input type="radio" name="searchMode" value="title" checked={searchMode === 'title'} onChange={() => setSearchMode('title')} />
+          <input
+            type="radio"
+            name="searchMode"
+            value="title"
+            checked={searchMode === 'title'}
+            onChange={() => setSearchMode('title')}
+          />
           タイトルで検索
         </label>
         <label>
-          <input type="radio" name="searchMode" value="content" checked={searchMode === 'content'} onChange={() => setSearchMode('content')} />
+          <input
+            type="radio"
+            name="searchMode"
+            value="content"
+            checked={searchMode === 'content'}
+            onChange={() => setSearchMode('content')}
+          />
           内容で検索
         </label>
       </div>
@@ -316,43 +411,76 @@ function SearchContent() {
       {results.length > 0 && (
         <div className="space-y-8">
           <h2 className="text-xl font-semibold text-center">検索結果</h2>
-          {results.map((movie) => (
-            <div key={movie.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-md flex flex-col sm:flex-row gap-3">
-              <div className="flex flex-col items-center">
-                {movie.poster_path && (
-                  <Image src={`https://image.tmdb.org/t/p/w200${movie.poster_path}`} alt={movie.title} width={100} height={150} className="rounded-md" />
-                )}
-                <button onClick={() => router.push(`/chat/${movie.id}`)} className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md w-full">
-                  この映画について語る
-                </button>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold">{movie.title}（{movie.release_date?.slice(0, 4)}）</h3>
-                <p className="text-sm text-gray-700 mb-2">{movie.overview?.slice(0, 200)}...</p>
-                <div>
-                  <strong className="block mb-1">視聴可能サービス：</strong>
-                  {movie.streamingServices?.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {movie.streamingServices.map((s, i) => (
-                        <a key={i} href={s.link} target="_blank" rel="noopener noreferrer">
-                          <Image src={`https://image.tmdb.org/t/p/w45${s.logo}`} alt={s.name} width={30} height={30} className="rounded border" />
-                        </a>
-                      ))}
-                    </div>
+          {results.map((movie) => {
+            const posterUrl = tmdbImg(movie.poster_path, 'w200');
+            return (
+              <div key={movie.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-md flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col items-center">
+                  {posterUrl ? (
+                    <Image
+                      src={posterUrl}
+                      alt={movie.title}
+                      width={100}
+                      height={150}
+                      className="rounded-md"
+                    />
                   ) : (
-                    <p className="text-sm text-gray-400">現在、視聴可能なサービス情報は見つかりませんでした。</p>
+                    <div className="w-[100px] h-[150px] bg-gray-200 rounded-md flex items-center justify-center text-xs text-gray-600">
+                      No Image
+                    </div>
                   )}
-                  <a
-                    href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title + ' DVD')}&i=dvd&tag=tetsugakuman-22`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => router.push(`/chat/${movie.id}`)}
+                    className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md w-full"
                   >
-                    <button className="mt-2 bg-yellow-400 text-black text-sm rounded-md w-full py-1">DVDを探す</button>
-                  </a>
+                    この映画について語る
+                  </button>
+                </div>
+
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold">
+                    {movie.title}（{movie.release_date?.slice(0, 4)}）
+                  </h3>
+                  <p className="text-sm text-gray-700 mb-2">{movie.overview?.slice(0, 200)}...</p>
+
+                  <div>
+                    <strong className="block mb-1">視聴可能サービス：</strong>
+                    {movie.streamingServices?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {movie.streamingServices.map((s, i) => {
+                          const logoUrl = tmdbImg(s.logo, 'w45');
+                          if (!logoUrl) return null; // ロゴが無ければ描画しない
+                          return (
+                            <a key={i} href={s.link} target="_blank" rel="noopener noreferrer">
+                              <Image
+                                src={logoUrl}
+                                alt={s.name}
+                                width={30}
+                                height={30}
+                                className="rounded border"
+                              />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400">現在、視聴可能なサービス情報は見つかりませんでした。</p>
+                    )}
+
+                    <a
+                      href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(movie.title + ' DVD')}&i=dvd&tag=tetsugakuman-22`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <button className="mt-2 bg-yellow-400 text-black text-sm rounded-md w-full py-1">
+                        DVDを探す
+                      </button>
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -368,15 +496,16 @@ function SearchContent() {
                 ? new Date(comment.createdAt.seconds * 1000).toLocaleDateString('ja-JP')
                 : '日時不明';
               return (
-                <li key={index} className="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-1 sm:gap-2">
-                  <Link href={`/?title=${encodeURIComponent(comment.movieTitle)}`}>
-                    <span className="text-blue-600 underline cursor-pointer shrink-0">{comment.movieTitle}</span>
-                  </Link>
-                  <Link href={`/chat/${comment.movieId}`}>
-                    <span className="flex-1 text-sm truncate cursor-pointer">{comment.text}</span>
-                  </Link>
-                  <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">{date}</span>
-                </li>
+                <li key={index} className="flex flex-col sm:flex-row sm:items-center border-b pb-2 gap-1 sm:gap-2 w-full">
+  <Link href={`/?title=${encodeURIComponent(comment.movieTitle)}`} className="sm:max-w-[30%] w-full break-words">
+    <span className="text-blue-600 underline cursor-pointer">{comment.movieTitle}</span>
+  </Link>
+  <Link href={`/chat/${comment.movieId}`} className="sm:max-w-[60%] w-full break-words">
+    <span className="text-sm cursor-pointer">{comment.text}</span>
+  </Link>
+  <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap sm:max-w-[10%] text-right">{date}</span>
+</li>
+
               );
             })}
           </ul>

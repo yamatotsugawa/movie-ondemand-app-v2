@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       max_tokens: 500,
     });
 
-    let parsed: any = {};
+    let parsed: Record<string, unknown> = {};
     try {
       parsed = JSON.parse(resp.choices[0].message?.content || '{}');
     } catch (err) {
@@ -53,8 +53,18 @@ export async function POST(req: Request) {
 
     // サーバー側フィルタリング（検索語との一致率）
     const validated = {
-      titlesJa: validateResults(parsed.titlesJa || [], originalQuery),
-      titlesEn: validateResults(parsed.titlesEn || [], originalQuery),
+      titlesJa: validateResults(
+        Array.isArray((parsed as Record<string, unknown>).titlesJa)
+          ? ((parsed as Record<string, unknown>).titlesJa as string[])
+          : [],
+        originalQuery
+      ),
+      titlesEn: validateResults(
+        Array.isArray((parsed as Record<string, unknown>).titlesEn)
+          ? ((parsed as Record<string, unknown>).titlesEn as string[])
+          : [],
+        originalQuery
+      ),
     };
 
     return NextResponse.json(validated);
@@ -75,7 +85,7 @@ function validateResults(titles: string[], query: string) {
   });
 }
 
-function extractKeywords(query: string) {
+function extractKeywords(query: string): string[] {
   return query
     .replace(/[。、！？・]/g, ' ')
     .split(/\s+/)
